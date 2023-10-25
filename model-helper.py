@@ -48,6 +48,10 @@ def generateMessages(srcFile):
         annotations.extend(["config", "configHandle", "localConfig", "localConfig.*"])
 
     messages.append(f"{mainClassName} = {formatVarName(mainClassName)}")
+    if parentClass == "GenericContent" or "FoundationConfigurableContent":
+        messages.append(f"models.content.{mainClassName} = {formatVarName(mainClassName)}")
+    if parentClass == "FoundationConfigurableContent":
+        messages.append(f"{mainClassName}.configHandle = Style")
 
     annotations.extend(varNames)
     for var in varNames:
