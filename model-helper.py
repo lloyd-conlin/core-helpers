@@ -20,21 +20,22 @@ def getTreeInformation(srcFile):
     file.close()
     # print(data)
     tree = javalang.parse.parse(data)
-    varNames = []
+    varNames = {}
     parentClass = ""
     print(tree)
+
+    mainClass = list(tree.filter(javalang.tree.ClassDeclaration))[0][1]
+    mainClassName = mainClass.name
+    varNames[mainClassName] = {}
+    parentClassRef = mainClass.extends
+    if parentClassRef is not None:
+        parentClass = parentClassRef.name
 
     for _, node in tree.filter(javalang.tree.FieldDeclaration):
         print(node)
         for _, innerNode in node.filter(javalang.tree.VariableDeclarator):
             if not "final" in node.modifiers and not checkForAnnotation("Transient", node.annotations):
-                varNames.append(innerNode.name)
-
-    mainClass = list(tree.filter(javalang.tree.ClassDeclaration))[0][1]
-    mainClassName = mainClass.name
-    parentClassRef = mainClass.extends
-    if parentClassRef is not None:
-        parentClass = parentClassRef.name
+                varNames[mainClassName][innerNode.name] = innerNode.type.name
 
     return mainClassName, parentClass, varNames
 
@@ -54,11 +55,16 @@ def generateMessages(srcFile):
         messages.append(f"{mainClassName}.configHandle = Style")
 
     annotations.extend(varNames)
-    for var in varNames:
+    constructorString = ""
+    for var in varNames[mainClassName].keys():
         #print(var)
         splitName = string.capwords(re.sub(r"([A-Z])", r" \1", var))
         #print(splitName)
         messages.append(f"{mainClassName}.{var} = {splitName}")
+        if varNames[mainClassName][var] == "String":
+            constructorString += f"this.{var} = \"\";\n"
+        elif varNames[mainClassName][var] == "List":
+            constructorString += f"this.{var} = new Array<>();\n"
 
     print(messages)
     print(annotations)
@@ -95,7 +101,7 @@ def generateMessages(srcFile):
     if parentClass == "FoundationConfigurableContent":
         setupParamsString += "super.setupParams(params);\n"
     for var in varNames:
-        setupParamsString += f'params.set("{var}", {var});\n'
+        setupParamsString += f'params.put("{var}", {var});\n'
 
     return True
 
