@@ -35,7 +35,8 @@ def getTreeInformation(srcFile):
         print(node)
         for _, innerNode in node.filter(javalang.tree.VariableDeclarator):
             if not "final" in node.modifiers and not checkForAnnotation("Transient", node.annotations):
-                varNames[mainClassName][innerNode.name] = innerNode.type.name
+                varNames[mainClassName][innerNode.name] = node.type.name
+
 
     return mainClassName, parentClass, varNames
 
@@ -54,20 +55,23 @@ def generateMessages(srcFile):
     if parentClass == "FoundationConfigurableContent":
         messages.append(f"{mainClassName}.configHandle = Style")
 
-    annotations.extend(varNames)
+    annotations.extend(varNames[mainClassName].keys())
     constructorString = ""
     for var in varNames[mainClassName].keys():
         #print(var)
         splitName = string.capwords(re.sub(r"([A-Z])", r" \1", var))
         #print(splitName)
         messages.append(f"{mainClassName}.{var} = {splitName}")
-        if varNames[mainClassName][var] == "String":
+        if varNames[mainClassName][var].lower() == "string":
             constructorString += f"this.{var} = \"\";\n"
-        elif varNames[mainClassName][var] == "List":
+        elif varNames[mainClassName][var].lower() == "list":
             constructorString += f"this.{var} = new Array<>();\n"
+        elif varNames[mainClassName][var].lower() == "boolean":
+            constructorString += f"this.{var} = false;\n"
 
     print(messages)
     print(annotations)
+    print(constructorString)
 
     global messagesString
     messagesString = f"# ----------------------- {mainClassName} -----------------------\n"
@@ -103,6 +107,7 @@ def generateMessages(srcFile):
     for var in varNames:
         setupParamsString += f'params.put("{var}", {var});\n'
 
+    print(varNames[mainClassName])
     return True
 
 
