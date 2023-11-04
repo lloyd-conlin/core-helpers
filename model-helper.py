@@ -257,7 +257,7 @@ def changeDisplay(content, labelString):
         debugPrint(constructorString, "Constructor Body")
         if setupParamsString != "":
             text.delete("1.0", tk.END)
-            text.insert(tk.END, setupParamsString)
+            text.insert(tk.END, constructorString)
 
 
 if __name__ == '__main__':
