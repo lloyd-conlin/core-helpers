@@ -45,6 +45,18 @@ def formatVarName(varName):
     return string.capwords(re.sub(r"([A-Z])", r" \1", varName))
 
 
+def throwGUIError(errorKey, errorFieldVar):
+    """ Error function to handle various errors that need to be thrown to the GUI
+    :param errorKey: short key to determine type of error
+    :type errorKey: string
+    :param errorFieldVar: variable to set the error message to determine which field should show the error
+    :type errorFieldVar: tk.StringVar
+    :return: Nothing
+    """
+    if errorKey == 'no-file-chosen':
+        errorFieldVar.set("No file has been selected - please choose a file before continuing")
+
+
 def getTreeInformation(srcFile):
     """ Takes a path to a Java file and parses it to extract information on classes and variables that are defined
     :param srcFile: string path to Java file
@@ -52,6 +64,8 @@ def getTreeInformation(srcFile):
     :rtype: (string, string, dict)
     :return: mainClassName, parentClass, varNames: strings for the main and parent class names, and a dict containing variable names and their associated types
     """
+    if srcFile == '':
+        return None
     with open(srcFile, "r") as file:
         data = file.read()
     file.close()
@@ -156,7 +170,7 @@ def generateConstructorBody(treeInfo):
 def generateMessages(treeInfo):
     """ Takes tuple of tree information to generate the messages for the variables in the class
     :param treeInfo: tuple of tree information
-    :type treeInfo: (string, string, dict)
+    :type treeInfo: (string, string, dict[string, dict[string, string]])
     :rtype: string
     :return: messagesString: A string containing messages entries for all the variables provided, with \n chars at the end of each line
     """
@@ -181,30 +195,36 @@ def generateMessages(treeInfo):
     return messagesString + '\n'
 
 
-def processTree(srcFile):
+def processTree(srcFile, errorFields):
     """ Main processing function that parses the Java file and calls the generator functions with this info
     :param srcFile: path to the file to be parsed
     :type srcFile: string
+    :param errorFields: dictionary of error field variables for error reporting
+    :type errorFields: dict[string, tk.StringVar]
     :rtype: None
     :return: Nothing
     """
     treeInfo = getTreeInformation(srcFile)
+    if treeInfo is None:
+        throwGUIError("no-file-chosen", errorFields["file"])
+        return None
     debugPrint(treeInfo[0], "mainClassName")
     debugPrint(treeInfo[1], "parentClass")
     debugPrint(treeInfo[2], "varNames")
 
-    # Please forgive the use of global variables, it just keeps all the functions nice and neat
-    global messagesString
+    global content
+
     messagesString = generateMessages(treeInfo)
+    content["messages"] = messagesString
 
-    global annotationString
     annotationString = generateAnnotations(treeInfo)
+    content["annotations"] = annotationString
 
-    global setupParamsString
     setupParamsString = generateSetupParamsBody(treeInfo)
+    content["params"] = setupParamsString
 
-    global constructorString
     constructorString = generateConstructorBody(treeInfo)
+    content["constructor"] = constructorString
 
 
 def chooseFile(fileNameTextBox):
@@ -222,42 +242,33 @@ def chooseFile(fileNameTextBox):
     return True
 
 
-def changeDisplay(content, labelString):
+def changeDisplay(contentKey, content, labelString):
     """ Function to switch what is displayed in the text box, so that the user can copy the content to their files
-    :param content: which string should be displayed in the main text box
-    :type content: string
+    :param contentKey: which string should be displayed in the main text box
+    :type contentKey: string
+    :param content: collection of the strings that have been processed from the Java file
+    :type content: dict[string, string]
     :param labelString: variable holding the title for the textbox
     :type labelString: tk.StringVar
     :rtype: None
     :return: Nothing
     """
-    if content == "messages":
+    if contentKey == "messages":
         labelString.set("Messages")
-        debugPrint(messagesString, "Messages")
-        if messagesString != "":
-            text.delete("1.0", tk.END)
-            text.insert(tk.END, messagesString)
-
-    elif content == "annotations":
+        debugPrint(content[contentKey], "Messages")
+    elif contentKey == "annotations":
         labelString.set("Annotations")
-        debugPrint(annotationString, "Annotations")
-        if annotationString != "":
-            text.delete("1.0", tk.END)
-            text.insert(tk.END, annotationString)
-
-    elif content == "params":
+        debugPrint(content[contentKey], "Annotations")
+    elif contentKey == "params":
         labelString.set("setupParams Body")
-        debugPrint(setupParamsString, "setupParams Body")
-        if setupParamsString != "":
-            text.delete("1.0", tk.END)
-            text.insert(tk.END, setupParamsString)
-
-    elif content == "constructor":
+        debugPrint(content[contentKey], "setupParams Body")
+    elif contentKey == "constructor":
         labelString.set("Constructor Body")
-        debugPrint(constructorString, "Constructor Body")
-        if setupParamsString != "":
-            text.delete("1.0", tk.END)
-            text.insert(tk.END, constructorString)
+        debugPrint(content[contentKey], "Constructor Body")
+
+    if content[contentKey] != "":
+        text.delete("1.0", tk.END)
+        text.insert(tk.END, content[contentKey])
 
 
 if __name__ == '__main__':
@@ -273,8 +284,22 @@ if __name__ == '__main__':
     window.columnconfigure(3, weight=1)
     window.columnconfigure(4, weight=1)
 
-    # Initialise string variable for labelTextBox
+    # Initialise label variables
     textbox_string = tk.StringVar()
+    fileError_string = tk.StringVar()
+
+    # Initialise global variables
+    content = {
+        "messages": "",
+        "annotations": "",
+        "params": "",
+        "constructor": "",
+    }
+
+    # Dictionary to hold the error variables for error reporting
+    errorFields = {
+        "file": fileError_string
+    }
 
     labelFileName = tk.Label(text="File Name")
     labelFileName.grid(row=0, column=2, pady=8)
@@ -282,33 +307,36 @@ if __name__ == '__main__':
     fileNameText = tk.Text(window, state='normal', width=100, height=2)
     fileNameText.grid(row=1, column=0, columnspan=5, padx=4)
 
+    labelFileNameError = tk.Label(textvariable=fileError_string)
+    labelFileNameError.grid(row=2, column=2, pady=8)
+
     # Wrapping the intended function in a lambda to pass to the command option
     # as the function supplied needs to take no arguments
     buttonChooseFile = tk.Button(window, text="Choose File", command=lambda: chooseFile(fileNameText))
-    buttonChooseFile.grid(row=2, column=2, pady=8)
+    buttonChooseFile.grid(row=3, column=2, pady=8)
 
     labelTextBox = tk.Label(textvariable=textbox_string)
-    labelTextBox.grid(row=3, column=2, pady=8)
+    labelTextBox.grid(row=4, column=2, pady=8)
 
     text = tk.Text(window, state='normal', width=100, height=20)
     scroll = tk.Scrollbar(window)
     text.configure(yscrollcommand=scroll.set)
-    text.grid(row=4, column=0, columnspan=5, padx=4)
+    text.grid(row=5, column=0, columnspan=5, padx=4)
 
     # Removing last character from fileNameText string as it inserts a \n character automatically
-    buttonProcessInfo = tk.Button(window, text="Generate Messages", command=lambda: processTree(fileNameText.get("1.0", tk.END)[:-1]))
-    buttonProcessInfo.grid(row=5, column=2, pady=8)
+    buttonProcessInfo = tk.Button(window, text="Generate Messages", command=lambda: processTree(fileNameText.get("1.0", tk.END)[:-1], errorFields))
+    buttonProcessInfo.grid(row=6, column=2, pady=8)
 
-    buttonShowMessages = tk.Button(window, text="Display Messages", command=lambda: changeDisplay("messages", textbox_string))
-    buttonShowMessages.grid(row=6, column=1, pady=8)
+    buttonShowMessages = tk.Button(window, text="Display Messages", command=lambda: changeDisplay("messages", content, textbox_string))
+    buttonShowMessages.grid(row=7, column=1, pady=8)
 
-    buttonShowAnnotations = tk.Button(window, text="Display Annotations", command=lambda: changeDisplay("annotations", textbox_string))
-    buttonShowAnnotations.grid(row=6, column=2, pady=8)
+    buttonShowAnnotations = tk.Button(window, text="Display Annotations", command=lambda: changeDisplay("annotations", content, textbox_string))
+    buttonShowAnnotations.grid(row=7, column=2, pady=8)
 
-    buttonShowSetupParams = tk.Button(window, text="Display setupParams", command=lambda: changeDisplay("params", textbox_string))
-    buttonShowSetupParams.grid(row=6, column=3, pady=8)
+    buttonShowSetupParams = tk.Button(window, text="Display setupParams", command=lambda: changeDisplay("params", content, textbox_string))
+    buttonShowSetupParams.grid(row=7, column=3, pady=8)
 
-    buttonShowConstructor = tk.Button(window, text="Display constructor", command=lambda: changeDisplay("constructor", textbox_string))
-    buttonShowConstructor.grid(row=7, column=1, pady=8)
+    buttonShowConstructor = tk.Button(window, text="Display constructor", command=lambda: changeDisplay("constructor", content, textbox_string))
+    buttonShowConstructor.grid(row=8, column=1, pady=8)
 
     window.mainloop()
