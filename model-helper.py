@@ -160,9 +160,11 @@ def generateConstructorBody(treeInfo):
         if varNames[mainClassName][var].lower() == "string":
             constructorString += f"this.{var} = \"\";\n"
         elif varNames[mainClassName][var].lower() == "list":
-            constructorString += f"this.{var} = new Array<>();\n"
+            constructorString += f"this.{var} = new ArrayList<>();\n"
         elif varNames[mainClassName][var].lower() == "boolean":
             constructorString += f"this.{var} = false;\n"
+        else:
+            constructorString += f"this.{var} = null;\n"
 
     return constructorString
 
